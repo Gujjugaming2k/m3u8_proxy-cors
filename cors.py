@@ -18,31 +18,30 @@ async def cors(request: Request, origins, method="GET") -> Response:
     requested = Requester(str(request.url))
     main_url = requested.host + requested.path + "?url="
     url = requested.query_params.get("url")
-    url += "?"+requested.query_string(requested.remaining_params)
+    url += "?" + requested.query_string(requested.remaining_params)
     requested = Requester(url)
     hdrs = request.headers.mutablecopy()
     hdrs["Accept-Encoding"] = ""
     hdrs.update(json.loads(request.query_params.get("headers", "{}").replace("'", '"')))
+    
+    # Add the permanent referer header
+    hdrs["referer"] = "https://iosmirror.cc/"
+    
     content, headers, code, cookies = requested.get(
         data=None,
         headers=hdrs,
         cookies=request.cookies,
         method=request.query_params.get("method", method),
         json_data=json.loads(request.query_params.get("json", "{}")),
-        additional_params=json.loads(request.get('params', '{}'))
+        additional_params=json.loads(request.query_params.get('params', '{}'))
     )
     headers['Access-Control-Allow-Origin'] = current_domain
-    # if "text/html" not in headers.get('Content-Type'):
-    #     headers['Content-Disposition'] = 'attachment; filename="master.m3u8"'
+    
     del_keys = [
         'Vary',
-        # 'Server',
-        # 'Report-To',
-        # 'NEL',
         'Content-Encoding',
         'Transfer-Encoding',
         'Content-Length',
-        # "Content-Type"
     ]
     for key in del_keys:
         headers.pop(key, None)
@@ -66,10 +65,12 @@ async def cors(request: Request, origins, method="GET") -> Response:
                 )
             new_content += "\n"
         content = new_content
+
     if "location" in headers:
         if headers["location"].startswith("/"):
             headers["location"] = requested.host + headers["location"]
         headers["location"] = main_url + headers["location"]
+    
     resp = Response(content, code, headers=headers)
     resp.set_cookie("_last_requested", requested.host, max_age=3600, httponly=True)
     return resp
